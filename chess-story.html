@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Narrative Chess Engine</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/chessboardjs@0.0.1/css/chessboard.css" />
+    <script src="https://unpkg.com/chessboardjs@0.0.1/js/chessboard.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+            background-color: #f0f0f0;
+        }
+        #board {
+            width: 400px; /* Adjust size as needed */
+            margin-bottom: 20px;
+        }
+        #narrative-popup {
+            /* Now a persistent, non-blocking notification bar */
+            display: none; 
+            position: fixed;
+            bottom: 0; /* Attach to the bottom of the screen */
+            width: 100%;
+            background-color: #2c3e50; /* Dark, dramatic color */
+            color: white;
+            z-index: 1000;
+            text-align: center;
+            padding: 10px 20px;
+            box-sizing: border-box;
+            border-top: 3px solid #ffcc00; /* Gold border for emphasis */
+            transition: opacity 0.5s, transform 0.5s;
+            transform: translateY(100%); /* Start off-screen */
+            opacity: 0;
+            pointer-events: none; /* KEY: Allows clicks to go through to the board */
+        }
+        #narrative-popup.active {
+            display: block;
+            transform: translateY(0); /* Slide up into view */
+            opacity: 1;
+        }
+        #narrative-popup h2 {
+            font-size: 1.5em;
+            color: #ffcc00; 
+            margin-top: 0;
+            margin-bottom: 5px;
+        }
+        #narrative-popup p {
+            margin: 0;
+            font-size: 1em;
+        }
+        #continue-btn { 
+            display: none; /* Hidden, as the game no longer pauses */
+        } 
+    </style>
+</head>
+<body>
+
+    <h1>Narrative Chess Engine</h1>
+
+    <div style="margin-bottom: 15px;">
+        <label for="trap-selector">Choose Your Narrative:</label>
+        <select id="trap-selector" onchange="resetGame()">
+            <option value="none">Standard Game (No Narrative)</option>
+            <option value="ponziani">1. Vengeance of the Pawn Knight (Ponziani)</option> 
+            <option value="friedLiver">2. The Unforgivable Insult (Fried Liver)</option>
+            <option value="traxler">3. The Queen's Isolation (Traxler Counterattack)</option>
+        </select>
+    </div>
+    <div id="board"></div>
+    <p id="status"></p>
+
+    <div id="narrative-popup">
+        <h2 id="popup-title"></h2>
+        <p id="popup-story"></p>
+        <audio id="story-audio" preload="auto"></audio> 
+        <button id="continue-btn">Continue the Game</button>
+    </div>
+
+    <script>
+        // Global variables
+        var chess = new Chess();
+        var board = null;
+        var selectedTrapId = 'none';
+        var activeNarrative = null;
+        let popupTimeout = null; 
+
+        // --- NARRATIVE DATA DEFINITIONS ---
+
+        // 1. FRIED LIVER NARRATIVE
+        const FRIED_LIVER_NARRATIVE = [
+            { pgn: "e5", title: "The Initial Stare", story: "Black meets the challenge, securing their boundary.", audioFile: "fl_m2.mp3" }, 
+            { pgn: "Nf3", title: "The Champion Arrives", story: "White's Champion rides the border.", audioFile: "fl_m3.mp3" }, 
+            { pgn: "Nc6", title: "The Black Guard", story: "Black sends out a scout in defense.", audioFile: "fl_m4.mp3" }, 
+            { pgn: "Bc4", title: "The Silent Threat", story: "The Bishop takes aim at the King's weak spot.", audioFile: "fl_m5.mp3" }, 
+            { pgn: "Nf6", title: "The Defender's Move", story: "Black defends, setting up the key trap.", audioFile: "fl_m6.mp3" }, 
+            { pgn: "Ng5", title: "The Provocation", story: "The Aggressor's Knight closes in on the border.", audioFile: "fl_m7.mp3" }, 
+            { pgn: "d5", title: "The Pawn's Insult", story: "The Black Pawn delivers the unforgivable insult!", audioFile: "fl_m8.mp3" }, 
+            { pgn: "exd5", title: "The Pawn's Death", story: "The White side breaks the barrier and accepts the challenge.", audioFile: "fl_m9.mp3" }, 
+            { pgn: "Nxd5", title: "The Counter-Strike", story: "The Black Minister steps in, confident the threat is contained.", audioFile: "fl_m10.mp3" }, 
+            { pgn: "Nxf7", title: "💥 THE ROYAL CRISIS", story: "The Champion executes the ultimate shame. The King MUST answer!", audioFile: "fl_m11.mp3" }, 
+            { pgn: "Kxf7", title: "The King is Forced Out", story: "The King abandons his castle and stands humiliated at the border.", audioFile: "fl_m12.mp3" }, 
+            { pgn: "Qf3+", title: "The Queen Seizes Control", story: "The aggrieved White Queen demands the King's surrender.", audioFile: "fl_m13.mp3" }, 
+            { pgn: "Ke6", title: "The King's Retreat", story: "The King retreats, recognizing the superior force and the face of his love.", audioFile: "fl_m14.mp3" } 
+        ];
+
+        // 2. TRAXLER COUNTERATTACK NARRATIVE
+        const TRAXLER_NARRATIVE = [
+            { pgn: "e5", title: "Black's Reply", story: "The Black King secures his boundary, ready for the ambush.", audioFile: "tr_m2.mp3" },
+            { pgn: "Nf3", title: "White's Champion", story: "White sends out a trusted patrol.", audioFile: "tr_m3.mp3" },
+            { pgn: "Nc6", title: "Black's Patrol", story: "Black meets the patrol, preparing the sacrificial ground.", audioFile: "tr_m4.mp3" },
+            { pgn: "Bc4", title: "The Bishop's Gaze", story: "White's Bishop eyes the $f7$ target, sensing weakness.", audioFile: "tr_m5.mp3" },
+            { pgn: "Nf6", title: "The Lure", story: "Black defends, intentionally inviting White's aggressive next move.", audioFile: "tr_m6.mp3" },
+            { pgn: "Ng5", title: "The Attack Begins", story: "White's Knight jumps, initiating the Fried Liver threat.", audioFile: "tr_m7.mp3" },
+            { pgn: "Bc5", title: "🔥 The Bishop's Sacrifice", story: "Black ignores the threat and offers the Bishop to chaos! The Traxler has begun!", audioFile: "tr_m8.mp3" }, 
+            { pgn: "Bxf7+", title: "The Foolish Capture", story: "White's Bishop foolishly takes the bait, leaving the King unprotected.", audioFile: "tr_m9.mp3" },
+            { pgn: "Ke7", title: "The King's Daring", story: "Black's King moves to the center, supporting the attack from the open field.", audioFile: "tr_m10.mp3" },
+            { pgn: "Bd5", title: "White Consolidates", story: "White tries to restore order by positioning the Bishop centrally.", audioFile: "tr_m11.mp3" },
+            { pgn: "Rf8", title: "The Rook's Call", story: "Black's Rook prepares to join the attack on the $f$-file, ignoring material loss.", audioFile: "tr_m12.mp3" },
+            { pgn: "O-O", title: "White's Retreat", story: "White's King retreats to safety, sensing danger.", audioFile: "tr_m13.mp3" },
+            { pgn: "Nd4", title: "👑 The Queen is Attacked!", story: "Black's Knight targets the White Queen! She is isolated deep in enemy territory!", audioFile: "tr_m14.mp3" }
+        ];
+
+        // 3. PONZIANI KNIGHT PROMOTION NARRATIVE
+        const PONZIANI_NARRATIVE = [
+            { pgn: "e5", title: "The Initial Rivalry", story: "The Girl and the Guy emerge, setting the stage for their contrasting ambitions.", audioFile: "pn_m2.mp3" },
+            { pgn: "Nf3", title: "The Mentor Arrives", story: "The Mentor (White Knight) takes a position of power, inspiring the Girl.", audioFile: "pn_m3.mp3" },
+            { pgn: "Nc6", title: "The Guy's Ally", story: "The Guy calls on his ally (Black Knight) to enforce the traditional view.", audioFile: "pn_m4.mp3" },
+            { pgn: "c3", title: "The Girl's Move", story: "The Girl advances, starting her quest to become a Knight.", audioFile: "pn_m5.mp3" },
+            { pgn: "f5", title: "The Guy's Mockery", story: "The Guy orders a reckless charge, trying to disqualify the Girl.", audioFile: "pn_m6.mp3" },
+            { pgn: "d4", title: "The Mentor's Setup", story: "The Mentor pushes the central pawn, preparing the final stage.", audioFile: "pn_m7.mp3" },
+            { pgn: "fxe4", title: "The Girl is Exposed", story: "The Guy convinces the Girl to strike, placing her in the line of fire.", audioFile: "pn_m8.mp3" },
+            { pgn: "Nxe5", title: "The Mentor's Sacrifice", story: "The Mentor sacrifices himself to draw out the traitor Knight.", audioFile: "pn_m9.mp3" },
+            { pgn: "Nxe5", title: "💔 THE BEST FRIEND IS KILLED", story: "The Black Knight kills the Best Friend, completing the sacrifice.", audioFile: "pn_m10.mp3" }, 
+            { pgn: "Qh5+", title: "The Vengeful Scream", story: "The White Queen unleashes a vengeful scream. The Mentor's plan begins.", audioFile: "pn_m11.mp3" },
+            { pgn: "g6", title: "Black's Blockade", story: "Black tries to block the attack, but the chaos has begun.", audioFile: "pn_m12.mp3" },
+            { pgn: "Qxe5+", title: "The Mentor's Payback", story: "The Mentor (Queen) strikes the Traitor Knight! The Girl’s path is cleared.", audioFile: "pn_m13.mp3" },
+            { pgn: "Qe7", title: "The King's Retreat", story: "The Guy's side retreats in fear, hiding behind the Queen.", audioFile: "pn_m14.mp3" },
+            { pgn: "Qxh8", title: "The Seizing of Arms", story: "The White Queen secures the prize. The 'b'-pawn begins her long march of vengeance.", audioFile: "pn_m15.mp3" },
+            { pgn: "Nf6", title: "Final Defense", story: "Black brings a piece into defense, unaware the final plot has been set.", audioFile: "pn_m16.mp3" }
+        ];
+
+        // --- MASTER NARRATIVE LIBRARY ---
+        const ALL_NARRATIVES = {
+            "friedLiver": FRIED_LIVER_NARRATIVE,
+            "traxler": TRAXLER_NARRATIVE,
+            "ponziani": PONZIANI_NARRATIVE
+        };
+        // ---------------------------------
+        
+        // Global variables remain the same...
+
+        // --- BOARD EVENT HANDLERS ---
+        function onDragStart (source, piece, position, orientation) {
+            if (chess.game_over() || 
+                (chess.turn() === 'w' && piece.search(/^b/) !== -1) ||
+                (chess.turn() === 'b' && piece.search(/^w/) !== -1)) {
+                return false;
+            }
+        }
+
+        function onDrop (source, target) {
+            var move = chess.move({
+                from: source,
+                to: target,
+                promotion: 'q' 
+            });
+
+            if (move === null) return 'snapback';
+
+            updateStatus();
+            
+            checkTraps(); // Trigger the non-interruptive narrative check
+        }
+
+        function onSnapEnd () {
+            board.position(chess.fen());
+        }
+
+
+        // --- TRAP DETECTION LOGIC ---
+        function checkTraps() {
+            if (selectedTrapId === 'none' || activeNarrative === null) {
+                return;
+            }
+
+            const history = chess.history();
+            const currentMoveIndex = history.length - 1;
+
+            if (currentMoveIndex >= activeNarrative.length) {
+                stopNarrative();
+                return;
+            }
+            
+            const expectedMoveData = activeNarrative[currentMoveIndex];
+            const lastMovePgn = history[currentMoveIndex];
+
+            if (lastMovePgn === expectedMoveData.pgn) {
+                triggerNarrative(expectedMoveData);
+            } else {
+                stopNarrative();
+            }
+        }
+
+        // --- NARRATIVE TRIGGER FUNCTION ---
+        function triggerNarrative(moveData) {
+            const popup = document.getElementById('narrative-popup');
+            const audio = document.getElementById('story-audio');
+            
+            if (popupTimeout) {
+                clearTimeout(popupTimeout);
+            }
+
+            document.getElementById('popup-title').innerText = moveData.title;
+            document.getElementById('popup-story').innerText = moveData.story;
+            
+            audio.src = moveData.audioFile;
+            
+            popup.classList.add('active');
+            audio.play().catch(e => console.log("Audio playback started (may be delayed by browser rules).")); 
+            
+            popupTimeout = setTimeout(() => {
+                popup.classList.remove('active');
+            }, 5000); 
+        }
+
+        // --- RESET AND SETUP FUNCTIONS ---
+        function resetGame() {
+            selectedTrapId = document.getElementById('trap-selector').value;
+            
+            chess.reset();
+            board.position('start');
+            updateStatus();
+            
+            // Set the active narrative based on the selection
+            activeNarrative = ALL_NARRATIVES[selectedTrapId] || null;
+
+            // Ensure the popup is hidden on reset
+            document.getElementById('narrative-popup').classList.remove('active');
+        }
+
+        function stopNarrative() {
+            activeNarrative = null;
+            selectedTrapId = 'none';
+            document.getElementById('trap-selector').value = 'none';
+            document.getElementById('status').innerHTML += " (Narrative Ended)";
+            document.getElementById('narrative-popup').classList.remove('active');
+        }
+
+        // --- STATUS/ENDGAME UPDATES ---
+        function updateStatus () {
+            var status = '';
+            var moveColor = 'White';
+            if (chess.turn() === 'b') {
+                moveColor = 'Black';
+            }
+
+            if (chess.in_checkmate()) {
+                status = 'Game over, ' + moveColor + ' is in checkmate.';
+            } else if (chess.in_draw()) {
+                status = 'Game over, drawn position.';
+            } else {
+                status = moveColor + ' to move.';
+                if (chess.in_check()) {
+                    status += ', ' + moveColor + ' is in check.';
+                }
+            }
+            document.getElementById('status').innerHTML = status;
+        }
+
+
+        // --- INITIALIZATION ---
+        var cfg = {
+            draggable: true,
+            position: 'start',
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd 
+        };
+        board = Chessboard('board', cfg);
+        
+        resetGame(); // Initial setup
+
+    </script>
+
+</body>
+</html>
