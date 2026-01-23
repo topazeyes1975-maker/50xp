@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fonda's Traditional Ogham Vine</title>
+    <style>
+        body { background: #1a1a1a; color: #d4af37; font-family: 'Segoe UI', serif; text-align: center; padding: 20px; }
+        .container { max-width: 500px; margin: auto; border: 1px solid #333; padding: 20px; border-radius: 15px; background: #222; }
+        input { padding: 15px; width: 85%; border-radius: 5px; border: 2px solid #d4af37; background: #111; color: white; font-size: 1.2rem; margin-bottom: 10px; }
+        #vine-container { margin-top: 20px; display: flex; justify-content: center; }
+        canvas { background: #222; border: 1px solid #333; box-shadow: 0 0 20px rgba(212, 175, 55, 0.1); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Ogham Vine Master</h2>
+    <input type="text" id="userInput" placeholder="Type here..." oninput="drawOgham()">
+    <div id="vine-container">
+        <canvas id="oghamCanvas" width="250" height="1000"></canvas>
+    </div>
+</div>
+
+<script>
+const charMap = {
+    'b': {side: 'right', lines: 1}, 'l': {side: 'right', lines: 2}, 'f': {side: 'right', lines: 3}, 's': {side: 'right', lines: 4}, 'n': {side: 'right', lines: 5},
+    'h': {side: 'left', lines: 1}, 'd': {side: 'left', lines: 2}, 't': {side: 'left', lines: 3}, 'c': {side: 'left', lines: 4}, 'q': {side: 'left', lines: 5},
+    'm': {side: 'slant', lines: 1}, 'g': {side: 'slant', lines: 2}, 'r': {side: 'slant', lines: 5},
+    'a': {side: 'vowel', lines: 1}, 'o': {side: 'vowel', lines: 2}, 'u': {side: 'vowel', lines: 3}, 'e': {side: 'vowel', lines: 4}, 'i': {side: 'vowel', lines: 5},
+    'p': {side: 'forfeda_p', lines: 1}, ' ': {side: 'space', lines: 0}
+};
+
+function drawOgham() {
+    const canvas = document.getElementById('oghamCanvas');
+    const ctx = canvas.getContext('2d');
+    const text = document.getElementById('userInput').value.toLowerCase();
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#d4af37';
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+
+    let x = 125;
+    let baselineY = canvas.height - 100; // Fixed starting point for feather
+    let currentY = baselineY - 40; // Where first letter starts
+    let step = 45; 
+
+    // 1. Pre-calculate the total height to find the TOP
+    const chars = text.split('');
+    let tempY = currentY;
+    chars.forEach(char => {
+        const config = charMap[char];
+        if (config) {
+            if (config.side === 'space') tempY -= 60;
+            else tempY -= (step + (config.lines * 5));
+        }
+    });
+    let topOfLine = tempY - 20;
+
+    // 2. Draw THE STEM (Exactly from Feather tip to Cross center)
+    ctx.beginPath();
+    ctx.moveTo(x, baselineY);
+    ctx.lineTo(x, topOfLine);
+    ctx.stroke();
+
+    // 3. Draw STARTING FEATHER ^ (Locked to the bottom tip)
+    ctx.beginPath();
+    ctx.moveTo(x - 20, baselineY + 20);
+    ctx.lineTo(x, baselineY); 
+    ctx.lineTo(x + 20, baselineY + 20);
+    ctx.stroke();
+
+    // 4. Draw LETTERS
+    let drawY = currentY;
+    chars.forEach((char) => {
+        const config = charMap[char];
+        if (!config) return;
+        if (config.side === 'space') { drawY -= 60; return; }
+
+        for (let i = 0; i < config.lines; i++) {
+            let gap = 12;
+            let offset = i * gap;
+            ctx.beginPath();
+            if (config.side === 'right') {
+                ctx.moveTo(x, drawY - offset); ctx.lineTo(x + 35, drawY - offset);
+            } else if (config.side === 'left') {
+                ctx.moveTo(x, drawY - offset); ctx.lineTo(x - 35, drawY - offset);
+            } else if (config.side === 'slant') {
+                ctx.moveTo(x - 30, drawY - offset + 10); ctx.lineTo(x + 30, drawY - offset - 10);
+            } else if (config.side === 'vowel') {
+                ctx.arc(x, drawY - offset, 6, 0, Math.PI * 2);
+                ctx.fillStyle = '#d4af37'; ctx.fill();
+            } else if (config.side === 'forfeda_p') {
+                ctx.moveTo(x, drawY); ctx.lineTo(x+20, drawY-10); ctx.lineTo(x, drawY-20);
+            }
+            ctx.stroke();
+        }
+        drawY -= step + (config.lines * 5);
+    });
+    
+    // 5. Draw FINISH CROSS + (Locked to the top tip)
+    ctx.beginPath();
+    ctx.moveTo(x - 20, topOfLine); ctx.lineTo(x + 20, topOfLine); // Horizontal
+    ctx.moveTo(x, topOfLine - 20); ctx.lineTo(x, topOfLine + 20); // Vertical
+    ctx.stroke();
+}
+drawOgham();
+</script>
+</body>
+</html>
