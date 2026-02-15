@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Mobile Shooter</title>
+    <style>
+        body { margin: 0; touch-action: none; overflow: hidden; background: #111; font-family: sans-serif; }
+        /* Left Joystick */
+        #move-zone { position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; z-index: 100; }
+        /* Right Joystick */
+        #look-zone { position: absolute; bottom: 50px; right: 50px; width: 120px; height: 120px; z-index: 100; }
+        #ui-overlay { position: absolute; top: 10px; left: 10px; color: white; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui-overlay">Status: Loading Character...</div>
+    <div id="move-zone"></div>
+    <div id="look-zone"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // --- 1. SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Sky Blue
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const light = new THREE.DirectionalLight(0xffffff, 1.5);
+        light.position.set(5, 10, 7.5);
+        scene.add(light, new THREE.AmbientLight(0x404040, 2));
+
+        // --- 2. LOADING THE CHARACTER ---
+        let playerModel = null;
+        const loader = new GLTFLoader();
+        
+        // CHANGE 'character.glb' TO YOUR ACTUAL FILENAME
+        loader.load('character.glb', (gltf) => {
+            playerModel = gltf.scene;
+            playerModel.traverse(child => { if(child.isMesh) child.castShadow = true; });
+            scene.add(playerModel);
+            document.getElementById('ui-overlay').innerText = "Character Loaded! Use Joysticks.";
+        }, 
+        undefined, 
+        (error) => {
+            console.error(error);
+            document.getElementById('ui-overlay').innerText = "Error: character.glb not found!";
+            // Create a temporary box so the game doesn't break
+            playerModel = new THREE.Mesh(new THREE.BoxGeometry(1,2,1), new THREE.MeshStandardMaterial({color: 0x00ff00}));
+            scene.add(playerModel);
+        });
+        // GROUND
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x555555}));
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        scene.add(new THREE.GridHelper(100, 50));
+
+        // --- 3. DUAL JOYSTICK LOGIC ---
+        let moveInput = { x: 0, y: 0 };
+        let lookInput = { x: 0, y: 0 };
+
+        const moveJoy = nipplejs.create({ zone: document.getElementById('move-zone'), mode: 'static', position: {left: '60px', top: '60px'}, color: 'blue' });
+        const lookJoy = nipplejs.create({ zone: document.getElementById('look-zone'), mode: 'static', position: {right: '60px', top: '60px'}, color: 'red' });
+
+        moveJoy.on('move', (e, d) => { moveInput = d.vector; });
+        moveJoy.on('end', () => { moveInput = { x: 0, y: 0 }; });
+
+        lookJoy.on('move', (e, d) => { lookInput = d.vector; });
+        lookJoy.on('end', () => { lookInput = { x: 0, y: 0 }; });
+
+        // --- 4. GAME LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (playerModel) {
+                // MOVEMENT (Left Stick)
+                playerModel.position.x += moveInput.x * 0.15;
+                playerModel.position.z -= moveInput.y * 0.15;
+
+                // ROTATION/AIMING (Right Stick)
+                if (Math.abs(lookInput.x) > 0.1 || Math.abs(lookInput.y) > 0.1) {
+                    const angle = Math.atan2(lookInput.x, lookInput.y);
+                    playerModel.rotation.y = angle;
+                }
+
+                // CAMERA FOLLOW
+                camera.position.set(playerModel.position.x, playerModel.position.y + 5, playerModel.position.z + 10);
+                camera.lookAt(playerModel.position);
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
