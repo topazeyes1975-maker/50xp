@@ -50,8 +50,8 @@
         let playerModel = null;
         const loader = new GLTFLoader();
         
-        // CHANGE 'character.glb' TO YOUR ACTUAL FILENAME
-        loader.load('character.glb', (gltf) => {
+        // CHANGE 'armored snail warrior 3d model.glb' TO YOUR ACTUAL FILENAME
+        loader.load('armored snail warrior 3d model.glb', (gltf) => {
             playerModel = gltf.scene;
             playerModel.traverse(child => { if(child.isMesh) child.castShadow = true; });
             scene.add(playerModel);
