@@ -3,18 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Mobile Shooter</title>
+    <title>Snail Warrior 3D</title>
     <style>
         body { margin: 0; touch-action: none; overflow: hidden; background: #111; font-family: sans-serif; }
-        /* Left Joystick */
         #move-zone { position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; z-index: 100; }
-        /* Right Joystick */
         #look-zone { position: absolute; bottom: 50px; right: 50px; width: 120px; height: 120px; z-index: 100; }
-        #ui-overlay { position: absolute; top: 10px; left: 10px; color: white; pointer-events: none; }
+        #ui-overlay { position: absolute; top: 10px; left: 10px; color: white; pointer-events: none; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div id="ui-overlay">Status: Loading Character...</div>
+    <div id="ui-overlay">Status: Looking for snail.glb...</div>
     <div id="move-zone"></div>
     <div id="look-zone"></div>
 
@@ -33,7 +31,81 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // --- 1. SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); 
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const light = new THREE.DirectionalLight(0xffffff, 1.5);
+        light.position.set(5, 10, 7.5);
+        scene.add(light, new THREE.AmbientLight(0x404040, 2));
+
+        let playerModel = null;
+        const loader = new GLTFLoader();
+        
+        // --- THE FIX: CHANGE YOUR FILE NAME ON GITHUB TO 'snail.glb' ---
+        loader.load('snail.glb', (gltf) => {
+            playerModel = gltf.scene;
+            playerModel.traverse(child => { if(child.isMesh) child.castShadow = true; });
+            scene.add(playerModel);
+            document.getElementById('ui-overlay').innerText = "Snail Warrior Active!";
+        }, 
+        undefined, 
+        (error) => {
+            console.error(error);
+            document.getElementById('ui-overlay').innerText = "Error: Rename your file to 'snail.glb' in GitHub!";
+            // Placeholder box
+            playerModel = new THREE.Mesh(new THREE.BoxGeometry(1,2,1), new THREE.MeshStandardMaterial({color: 0x00ff00}));
+            scene.add(playerModel);
+        });
+
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x555555}));
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        scene.add(new THREE.GridHelper(100, 50));
+
+        let moveInput = { x: 0, y: 0 };
+        let lookInput = { x: 0, y: 0 };
+
+        const moveJoy = nipplejs.create({ zone: document.getElementById('move-zone'), mode: 'static', position: {left: '60px', top: '60px'}, color: 'blue' });
+        const lookJoy = nipplejs.create({ zone: document.getElementById('look-zone'), mode: 'static', position: {right: '60px', top: '60px'}, color: 'red' });
+
+        moveJoy.on('move', (e, d) => { moveInput = d.vector; });
+        moveJoy.on('end', () => { moveInput = { x: 0, y: 0 }; });
+
+        lookJoy.on('move', (e, d) => { lookInput = d.vector; });
+        lookJoy.on('end', () => { lookInput = { x: 0, y: 0 }; });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (playerModel) {
+                playerModel.position.x += moveInput.x * 0.15;
+                playerModel.position.z -= moveInput.y * 0.15;
+
+                if (Math.abs(lookInput.x) > 0.1 || Math.abs(lookInput.y) > 0.1) {
+                    const angle = Math.atan2(lookInput.x, lookInput.y);
+                    playerModel.rotation.y = angle;
+                }
+
+                camera.position.set(playerModel.position.x, playerModel.position.y + 5, playerModel.position.z + 10);
+                camera.lookAt(playerModel.position);
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB); // Sky Blue
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
